@@ -14,9 +14,16 @@ export async function createProcesso(formData: FormData) {
   const responsavelId = String(formData.get("responsavel_id") ?? "") || null;
   const monitoramento = formData.get("monitoramento_diario_oficial") === "on";
   const segredoJustica = formData.get("segredo_justica") === "on";
+  const autor = String(formData.get("autor") ?? "").trim() || null;
+  const reu = String(formData.get("reu") ?? "").trim() || null;
+  const valorCausaRaw = String(formData.get("valor_causa") ?? "").replace(",", ".").trim();
+  const valorCausa = valorCausaRaw ? Number(valorCausaRaw) : null;
 
   if (!clienteId || !numeroProcesso) {
     throw new Error("Selecione o cliente e informe o número do processo.");
+  }
+  if (valorCausaRaw && !Number.isFinite(valorCausa)) {
+    throw new Error("Valor da causa inválido.");
   }
 
   const supabase = await createClient();
@@ -28,6 +35,9 @@ export async function createProcesso(formData: FormData) {
     monitoramento_diario_oficial: monitoramento,
     segredo_justica: segredoJustica,
     tribunal_sistema: segredoJustica ? "esaj" : null,
+    autor,
+    reu,
+    valor_causa: valorCausa,
     created_by: session.profile.id,
   });
 

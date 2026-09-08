@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { businessDaysUntil, classificarPrazo, URGENCIA_CLASSES, URGENCIA_LABEL } from "@/lib/businessDays";
+import { businessDaysUntil, classificarPrazo, diaSegurancaD1, URGENCIA_CLASSES, URGENCIA_LABEL } from "@/lib/businessDays";
 
 function fmtDate(d: string) {
   return new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR");
+}
+
+function fmtD1(dataVencimento: string) {
+  return new Date(`${diaSegurancaD1(dataVencimento)}T00:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function formatBRL(v: number) {
@@ -23,15 +30,24 @@ export default async function PainelPage() {
   const canPrazos = session.permissions.prazos;
   const canFinanceiro = session.permissions.financeiro;
 
+  type PrazoPainel = {
+    id: string;
+    tipo: string;
+    descricao: string | null;
+    data_vencimento: string;
+    processo_id: string | null;
+    cliente_id: string | null;
+  };
+
   const [{ data: prazos }, { data: tarefas }] = await Promise.all([
     canPrazos
       ? supabase
           .from("prazos")
-          .select("id, tipo, descricao, data_vencimento")
+          .select("id, tipo, descricao, data_vencimento, processo_id, cliente_id")
           .eq("status", "pendente")
           .order("data_vencimento", { ascending: true })
           .limit(6)
-      : Promise.resolve({ data: [] as { id: string; tipo: string; descricao: string | null; data_vencimento: string }[] }),
+      : Promise.resolve({ data: [] as PrazoPainel[] }),
     supabase
       .from("tarefas")
       .select("id, titulo, data_limite")
@@ -41,9 +57,42 @@ export default async function PainelPage() {
       .limit(6),
   ]);
 
+  // Pra mostrar "processo/cliente vinculado" logo no início de cada prazo,
+  // sem precisar buscar todo mundo — só os processos/clientes referenciados
+  // pelos prazos que já vieram na consulta acima.
+  const processoIdsPrazos = Array.from(
+    new Set((prazos ?? []).map((p) => p.processo_id).filter((id): id is string => Boolean(id)))
+  );
+  const { data: processosPrazos } =
+    processoIdsPrazos.length > 0
+      ? await supabase.from("processos").select("id, cliente_id, numero_processo").in("id", processoIdsPrazos)
+      : { data: [] as { id: string; cliente_id: string; numero_processo: string }[] };
+  const processoPrazoById = new Map((processosPrazos ?? []).map((p) => [p.id, p]));
+
+  const clienteIdsPrazos = Array.from(
+    new Set(
+      (prazos ?? [])
+        .map((p) => p.cliente_id ?? (p.processo_id ? processoPrazoById.get(p.processo_id)?.cliente_id : null))
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const { data: clientesPrazos } =
+    clienteIdsPrazos.length > 0
+      ? await supabase.from("clientes").select("id, nome_completo").in("id", clienteIdsPrazos)
+      : { data: [] as { id: string; nome_completo: string }[] };
+  const clienteNomePrazoById = new Map((clientesPrazos ?? []).map((c) => [c.id, c.nome_completo]));
+
   const prazosComUrgencia = (prazos ?? []).map((p) => {
     const diasUteis = businessDaysUntil(p.data_vencimento);
-    return { ...p, diasUteis, urgencia: classificarPrazo(diasUteis) };
+    const processo = p.processo_id ? processoPrazoById.get(p.processo_id) : null;
+    const clienteId = p.cliente_id ?? processo?.cliente_id ?? null;
+    return {
+      ...p,
+      diasUteis,
+      urgencia: classificarPrazo(diasUteis),
+      processo_numero: processo?.numero_processo ?? null,
+      cliente_nome: clienteId ? clienteNomePrazoById.get(clienteId) ?? null : null,
+    };
   });
   const prazosFataisOuVencidos = prazosComUrgencia.filter((p) => p.urgencia === "fatal" || p.urgencia === "vencido").length;
 
@@ -139,12 +188,19 @@ export default async function PainelPage() {
               {prazosComUrgencia.map((p) => {
                 const c = URGENCIA_CLASSES[p.urgencia];
                 return (
-                  <li key={p.id} className="flex items-center justify-between py-2.5 text-sm">
+                  <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                     <div>
+                      <div className="text-[12px] font-semibold text-brand-navy">
+                        {p.processo_numero || "Sem processo vinculado"}
+                        {p.cliente_nome && ` — ${p.cliente_nome}`}
+                      </div>
                       <div className="font-semibold text-foreground">{p.tipo}</div>
-                      <div className="text-[12px] text-text-muted">{fmtDate(p.data_vencimento)}</div>
+                      <div className="text-[12px] text-text-muted">
+                        {fmtDate(p.data_vencimento)}
+                        <span className="ml-2 font-semibold text-status-critical">D-1: {fmtD1(p.data_vencimento)}</span>
+                      </div>
                     </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${c.text} ${c.bg}`}>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${c.text} ${c.bg}`}>
                       {URGENCIA_LABEL[p.urgencia]}
                     </span>
                   </li>

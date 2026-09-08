@@ -34,7 +34,7 @@ export default async function OperacionalPage({
       supabase.from("clientes").select("id, nome_completo").order("nome_completo"),
       supabase
         .from("processos")
-        .select("id, cliente_id, numero_processo, descricao, status, responsavel_id, segredo_justica")
+        .select("id, cliente_id, numero_processo, descricao, status, responsavel_id, segredo_justica, autor, reu, valor_causa")
         .order("created_at", { ascending: false }),
       supabase
         .from("prazos")
@@ -94,6 +94,7 @@ export default async function OperacionalPage({
   const prazoRows: PrazoRow[] = (prazos ?? []).map((p) => {
     const diasUteis = businessDaysUntil(p.data_vencimento);
     const processo = p.processo_id ? processoById.get(p.processo_id) : null;
+    const clienteIdResolvido = p.cliente_id ?? processo?.cliente_id ?? null;
     return {
       id: p.id,
       tipo: p.tipo,
@@ -102,12 +103,12 @@ export default async function OperacionalPage({
       status: p.status,
       responsavel_id: p.responsavel_id,
       responsavel_nome: p.responsavel_id ? profileName.get(p.responsavel_id) ?? null : null,
-      cliente_nome: p.cliente_id
-        ? clienteName.get(p.cliente_id) ?? null
-        : processo
-        ? clienteName.get(processo.cliente_id) ?? null
-        : null,
+      cliente_id: clienteIdResolvido,
+      cliente_nome: clienteIdResolvido ? clienteName.get(clienteIdResolvido) ?? null : null,
       processo_numero: processo?.numero_processo ?? null,
+      autor: processo?.autor ?? null,
+      reu: processo?.reu ?? null,
+      valor_causa: processo?.valor_causa != null ? Number(processo.valor_causa) : null,
       diasUteis,
       urgencia: classificarPrazo(diasUteis),
     };

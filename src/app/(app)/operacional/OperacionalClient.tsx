@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   createProcesso,
@@ -16,7 +16,7 @@ import {
   sincronizarDataJudManual,
 } from "./actions";
 import type { ResumoSincronizacao } from "@/lib/datajudSync";
-import { URGENCIA_CLASSES, URGENCIA_LABEL, type PrazoUrgencia } from "@/lib/businessDays";
+import { URGENCIA_CLASSES, URGENCIA_LABEL, diaSegurancaD1, type PrazoUrgencia } from "@/lib/businessDays";
 
 export type Option = { id: string; label: string };
 
@@ -40,8 +40,12 @@ export type PrazoRow = {
   status: "pendente" | "concluido";
   responsavel_id: string | null;
   responsavel_nome: string | null;
+  cliente_id: string | null;
   cliente_nome: string | null;
   processo_numero: string | null;
+  autor: string | null;
+  reu: string | null;
+  valor_causa: number | null;
   diasUteis: number;
   urgencia: PrazoUrgencia;
 };
@@ -100,6 +104,17 @@ function fmtDate(d: string) {
   return new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR");
 }
 
+function fmtD1(dataVencimento: string) {
+  return new Date(`${diaSegurancaD1(dataVencimento)}T00:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function formatBRL(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export default function OperacionalClient({
   initialTab,
   canProcessos,
@@ -145,6 +160,7 @@ export default function OperacionalClient({
   const [showProcessoForm, setShowProcessoForm] = useState(false);
   const [showPrazoForm, setShowPrazoForm] = useState(false);
   const [editingPrazoId, setEditingPrazoId] = useState<string | null>(null);
+  const [viewingPrazoId, setViewingPrazoId] = useState<string | null>(null);
   const [showTarefaForm, setShowTarefaForm] = useState(false);
   const [showTimesheetForm, setShowTimesheetForm] = useState(false);
   const [showAndamentoForm, setShowAndamentoForm] = useState(false);
@@ -238,6 +254,23 @@ export default function OperacionalClient({
                 <input name="descricao" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1">
+                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Autor</label>
+                <input name="autor" placeholder="Preenchimento manual" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+              </div>
+              <div className="col-span-1">
+                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Réu</label>
+                <input name="reu" placeholder="Preenchimento manual" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+              </div>
+              <div className="col-span-1">
+                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Valor da causa</label>
+                <input
+                  name="valor_causa"
+                  inputMode="decimal"
+                  placeholder="Ex: 15000.00"
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="col-span-1">
                 <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Responsável</label>
                 <select name="responsavel_id" className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
                   <option value="">Não definido</option>
@@ -303,6 +336,9 @@ export default function OperacionalClient({
                       {p.prazoFatal ? (
                         <div className="flex flex-col gap-0.5">
                           <span className="text-text-secondary">{fmtDate(p.prazoFatal.data_vencimento)}</span>
+                          <span className="text-[11px] font-semibold text-status-critical">
+                            D-1 (segurança): {fmtD1(p.prazoFatal.data_vencimento)}
+                          </span>
                           <UrgenciaBadge urgencia={p.prazoFatal.urgencia} />
                         </div>
                       ) : (
@@ -472,40 +508,98 @@ export default function OperacionalClient({
                       </td>
                     </tr>
                   ) : (
-                    <tr key={p.id} className="border-t border-border/60">
-                      <td className="py-3 font-semibold text-foreground">{fmtDate(p.data_vencimento)}</td>
-                      <td className="py-3 text-text-secondary">
-                        {p.tipo}
-                        {p.descricao && <div className="text-[12px] text-text-muted">{p.descricao}</div>}
-                      </td>
-                      <td className="py-3 text-text-secondary">
-                        {p.processo_numero || "—"}
-                        {p.cliente_nome && <div className="text-[12px] text-text-muted">{p.cliente_nome}</div>}
-                      </td>
-                      <td className="py-3 text-text-secondary">{p.responsavel_nome || "—"}</td>
-                      <td className="py-3"><UrgenciaBadge urgencia={p.urgencia} /></td>
-                      <td className="py-3 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
-                            disabled={isPending}
-                            onClick={() => {
-                              setFormError(null);
-                              setEditingPrazoId(p.id);
-                            }}
-                            className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            disabled={isPending}
-                            onClick={() => startTransition(() => updatePrazoStatus(p.id, "concluido"))}
-                            className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
-                          >
-                            Concluir
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={p.id}>
+                      <tr
+                        className="cursor-pointer border-t border-border/60 hover:bg-background/60"
+                        onClick={() => setViewingPrazoId(viewingPrazoId === p.id ? null : p.id)}
+                      >
+                        <td className="py-3 font-semibold text-foreground">
+                          {fmtDate(p.data_vencimento)}
+                          <div className="text-[11px] font-semibold text-status-critical">
+                            D-1 (segurança): {fmtD1(p.data_vencimento)}
+                          </div>
+                        </td>
+                        <td className="py-3 text-text-secondary">
+                          {p.tipo}
+                          {p.descricao && <div className="text-[12px] text-text-muted">{p.descricao}</div>}
+                        </td>
+                        <td className="py-3 text-text-secondary">
+                          {p.processo_numero || "—"}
+                          {p.cliente_nome && <div className="text-[12px] text-text-muted">{p.cliente_nome}</div>}
+                        </td>
+                        <td className="py-3 text-text-secondary">{p.responsavel_nome || "—"}</td>
+                        <td className="py-3"><UrgenciaBadge urgencia={p.urgencia} /></td>
+                        <td className="py-3 text-right">
+                          <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              disabled={isPending}
+                              onClick={() => setViewingPrazoId(viewingPrazoId === p.id ? null : p.id)}
+                              className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
+                            >
+                              {viewingPrazoId === p.id ? "Fechar" : "Detalhes"}
+                            </button>
+                            <button
+                              disabled={isPending}
+                              onClick={() => {
+                                setFormError(null);
+                                setEditingPrazoId(p.id);
+                              }}
+                              className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              disabled={isPending}
+                              onClick={() => startTransition(() => updatePrazoStatus(p.id, "concluido"))}
+                              className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
+                            >
+                              Concluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {viewingPrazoId === p.id && (
+                        <tr className="border-t border-border/60 bg-background/60">
+                          <td colSpan={6} className="py-4">
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+                              <div className="col-span-2 sm:col-span-4">
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Do que se trata</div>
+                                <div className="mt-0.5 text-foreground">{p.descricao || p.tipo}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Processo</div>
+                                <div className="mt-0.5 text-foreground">{p.processo_numero || "—"}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Cliente</div>
+                                <div className="mt-0.5 text-foreground">
+                                  {p.cliente_nome || "—"}
+                                  {p.cliente_id && (
+                                    <Link href={`/clientes/${p.cliente_id}`} className="ml-2 text-[12px] font-semibold text-brand-navy hover:underline">
+                                      Ver cliente →
+                                    </Link>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Autor</div>
+                                <div className="mt-0.5 text-foreground">{p.autor || "Não informado"}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Réu</div>
+                                <div className="mt-0.5 text-foreground">{p.reu || "Não informado"}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Valor da causa</div>
+                                <div className="mt-0.5 text-foreground">
+                                  {p.valor_causa != null ? formatBRL(p.valor_causa) : "Não informado"}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   )
                 )}
               </tbody>

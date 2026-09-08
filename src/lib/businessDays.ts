@@ -43,6 +43,21 @@ export function businessDaysUntil(dueDate: string | Date, from: Date = new Date(
   return count;
 }
 
+/**
+ * Data de segurança interna (D-1): um dia de calendário antes do vencimento
+ * real, pedida pela Daniela como margem de segurança pessoal — ex: se o
+ * prazo fatal é 11/09, o sistema mostra "D-1: 10/09" ao lado, pra ela agir
+ * um dia antes do vencimento oficial. NÃO altera o vencimento real gravado
+ * no banco (esse continua sendo a data oficial do processo) — é só uma
+ * exibição adicional.
+ */
+export function diaSegurancaD1(dataVencimento: string): string {
+  const d = toLocalMidnight(dataVencimento);
+  d.setDate(d.getDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export type PrazoUrgencia = "vencido" | "fatal" | "proximo" | "em_dia";
 
 /**
