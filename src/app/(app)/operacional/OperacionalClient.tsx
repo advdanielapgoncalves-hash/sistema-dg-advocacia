@@ -532,8 +532,8 @@ export default function OperacionalClient({
                 <input name="descricao" required className="w-full rounded-md border border-border px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1">
-                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Tempo (horas)</label>
-                <input name="horas" type="number" step="0.25" min="0.25" required placeholder="Ex: 1.5" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Tempo (minutos)</label>
+                <input name="minutos" type="number" step="1" min="1" required placeholder="Ex: 90" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1">
                 <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Data</label>

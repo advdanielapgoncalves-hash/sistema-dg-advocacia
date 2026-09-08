@@ -128,17 +128,15 @@ export async function createApontamento(formData: FormData) {
   if (!session) throw new Error("Sessão expirada, faça login de novo.");
 
   const descricao = String(formData.get("descricao") ?? "").trim();
-  const horasRaw = String(formData.get("horas") ?? "").replace(",", ".");
-  const horas = Number(horasRaw);
+  const minutosRaw = String(formData.get("minutos") ?? "").replace(",", ".");
+  const minutos = Math.round(Number(minutosRaw));
   const data = String(formData.get("data") ?? "") || new Date().toISOString().slice(0, 10);
   const tarefaId = String(formData.get("tarefa_id") ?? "") || null;
   const prazoId = String(formData.get("prazo_id") ?? "") || null;
 
-  if (!descricao || !Number.isFinite(horas) || horas <= 0) {
-    throw new Error("Descreva a atividade e informe um tempo maior que zero (em horas, ex: 1.5).");
+  if (!descricao || !Number.isFinite(minutos) || minutos <= 0) {
+    throw new Error("Descreva a atividade e informe um tempo maior que zero (em minutos, ex: 90).");
   }
-
-  const minutos = Math.round(horas * 60);
 
   const supabase = await createClient();
   const { error } = await supabase.from("apontamentos_tempo").insert({
