@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #12172b;
+
+  /* Identidade visual — Daniela Gonçalves Advocacia e Assessoria */
+  --brand-navy: #44596e;
+  --brand-navy-hover: #2e3d4d;
+  --brand-gold-light: #e4c68a;
+  --brand-gold-dark: #a9793f;
+  --brand-gray: #cccccc;
+
+  --text-secondary: #5b6172;
+  --text-muted: #898781;
+  --border: #e4e7ed;
+
+  --status-critical: #b3271f;
+  --status-critical-bg: #fbeaea;
+  --status-warning: #8a5a00;
+  --status-warning-bg: #fdf3dc;
+  --status-good: #0c7a32;
+  --status-good-bg: #e9f7ec;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-hover: var(--brand-navy-hover);
+  --color-brand-gold-light: var(--brand-gold-light);
+  --color-brand-gold-dark: var(--brand-gold-dark);
+  --color-brand-gray: var(--brand-gray);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-status-critical: var(--status-critical);
+  --color-status-critical-bg: var(--status-critical-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-good: var(--status-good);
+  --color-status-good-bg: var(--status-good-bg);
+  --font-sans: var(--font-montserrat);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
