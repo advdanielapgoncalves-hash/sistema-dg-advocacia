@@ -2,7 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import AtendimentoForm from "./AtendimentoForm";
+import AtendimentoForm, { type AtendimentoRow } from "./AtendimentoForm";
+
+function formatMinutos(minutos: number) {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${String(m).padStart(2, "0")}`;
+}
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireModule("clientes");
@@ -26,6 +34,52 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
 
   if (!cliente) {
     notFound();
+  }
+
+  const atendimentoRows: AtendimentoRow[] = (atendimentos ?? []).map((a) => {
+    const registradoPor = Array.isArray(a.registrado_por) ? a.registrado_por[0] : a.registrado_por;
+    return {
+      id: a.id,
+      data: a.data,
+      tipo: a.tipo,
+      descricao: a.descricao,
+      registrado_por_nome: registradoPor?.full_name ?? null,
+    };
+  });
+
+  // Horas trabalhadas dedicadas a este cliente: soma os apontamentos de tempo
+  // (timesheet) vinculados a um prazo deste cliente, direta ou indiretamente
+  // (via uma tarefa que está vinculada a um prazo deste cliente).
+  //
+  // Limitação conhecida: um apontamento lançado sem nenhum vínculo ("avulso")
+  // ou vinculado só a uma tarefa que não está presa a nenhum prazo deste
+  // cliente NÃO entra nessa soma — o esquema do banco hoje não liga tarefas
+  // direto a um cliente/processo, só através de um prazo. Ou seja, esse total
+  // pode ficar abaixo do tempo real dedicado ao cliente se a equipe lançar
+  // tempo sem vincular a um prazo.
+  const { data: prazosCliente } = await supabase.from("prazos").select("id").eq("cliente_id", id);
+  const prazoIds = (prazosCliente ?? []).map((p) => p.id);
+
+  let tarefaIds: string[] = [];
+  if (prazoIds.length > 0) {
+    const { data: tarefasVinculadas } = await supabase.from("tarefas").select("id").in("prazo_id", prazoIds);
+    tarefaIds = (tarefasVinculadas ?? []).map((t) => t.id);
+  }
+
+  let totalMinutosCliente = 0;
+  if (prazoIds.length > 0) {
+    const { data: apontPrazo } = await supabase
+      .from("apontamentos_tempo")
+      .select("minutos")
+      .in("prazo_id", prazoIds);
+    totalMinutosCliente += (apontPrazo ?? []).reduce((soma, a) => soma + a.minutos, 0);
+  }
+  if (tarefaIds.length > 0) {
+    const { data: apontTarefa } = await supabase
+      .from("apontamentos_tempo")
+      .select("minutos")
+      .in("tarefa_id", tarefaIds);
+    totalMinutosCliente += (apontTarefa ?? []).reduce((soma, a) => soma + a.minutos, 0);
   }
 
   return (
@@ -55,6 +109,17 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
           <div className="text-[11.5px] font-semibold uppercase tracking-wide text-text-muted">Endereço</div>
           <div className="mt-1 text-foreground">{cliente.endereco || "—"}</div>
         </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-border bg-white p-5">
+        <div className="mb-1">
+          <span className="text-[15px] font-bold text-foreground">Horas trabalhadas (timesheet)</span>
+          <p className="mt-0.5 text-[12.5px] text-text-muted">
+            Soma dos apontamentos de tempo vinculados a prazos deste cliente. Tempo lançado sem vínculo a um
+            prazo deste cliente não entra nessa conta.
+          </p>
+        </div>
+        <div className="mt-2 text-[26px] font-bold text-foreground">{formatMinutos(totalMinutosCliente)}</div>
       </div>
 
       <div className="mt-6 rounded-xl border border-border bg-white p-5">
@@ -89,29 +154,8 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="mt-3">
-          <AtendimentoForm clienteId={id} />
+          <AtendimentoForm clienteId={id} atendimentos={atendimentoRows} />
         </div>
-
-        <ul className="mt-4 flex flex-col divide-y divide-border/60">
-          {(atendimentos ?? []).length === 0 && (
-            <li className="py-3 text-sm text-text-muted">Nenhum atendimento registrado ainda.</li>
-          )}
-          {(atendimentos ?? []).map((a) => {
-            const registradoPor = Array.isArray(a.registrado_por) ? a.registrado_por[0] : a.registrado_por;
-            return (
-              <li key={a.id} className="py-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-foreground">{a.tipo || "Atendimento"}</span>
-                  <span className="text-[12px] text-text-muted">
-                    {new Date(a.data).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                    {registradoPor?.full_name ? ` · ${registradoPor.full_name}` : ""}
-                  </span>
-                </div>
-                <p className="mt-1 text-text-secondary">{a.descricao}</p>
-              </li>
-            );
-          })}
-        </ul>
       </div>
     </div>
   );

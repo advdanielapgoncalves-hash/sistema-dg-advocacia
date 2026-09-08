@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   createProcesso,
   createPrazo,
+  updatePrazo,
   createTarefa,
   updatePrazoStatus,
   updateTarefaStatus,
@@ -37,6 +38,7 @@ export type PrazoRow = {
   descricao: string | null;
   data_vencimento: string;
   status: "pendente" | "concluido";
+  responsavel_id: string | null;
   responsavel_nome: string | null;
   cliente_nome: string | null;
   processo_numero: string | null;
@@ -142,6 +144,7 @@ export default function OperacionalClient({
   const [isPending, startTransition] = useTransition();
   const [showProcessoForm, setShowProcessoForm] = useState(false);
   const [showPrazoForm, setShowPrazoForm] = useState(false);
+  const [editingPrazoId, setEditingPrazoId] = useState<string | null>(null);
   const [showTarefaForm, setShowTarefaForm] = useState(false);
   const [showTimesheetForm, setShowTimesheetForm] = useState(false);
   const [showAndamentoForm, setShowAndamentoForm] = useState(false);
@@ -390,30 +393,121 @@ export default function OperacionalClient({
                 {prazos.length === 0 && (
                   <tr><td colSpan={6} className="py-6 text-center text-text-muted">Nenhum prazo pendente.</td></tr>
                 )}
-                {prazos.map((p) => (
-                  <tr key={p.id} className="border-t border-border/60">
-                    <td className="py-3 font-semibold text-foreground">{fmtDate(p.data_vencimento)}</td>
-                    <td className="py-3 text-text-secondary">
-                      {p.tipo}
-                      {p.descricao && <div className="text-[12px] text-text-muted">{p.descricao}</div>}
-                    </td>
-                    <td className="py-3 text-text-secondary">
-                      {p.processo_numero || "—"}
-                      {p.cliente_nome && <div className="text-[12px] text-text-muted">{p.cliente_nome}</div>}
-                    </td>
-                    <td className="py-3 text-text-secondary">{p.responsavel_nome || "—"}</td>
-                    <td className="py-3"><UrgenciaBadge urgencia={p.urgencia} /></td>
-                    <td className="py-3 text-right">
-                      <button
-                        disabled={isPending}
-                        onClick={() => startTransition(() => updatePrazoStatus(p.id, "concluido"))}
-                        className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
-                      >
-                        Concluir
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {prazos.map((p) =>
+                  editingPrazoId === p.id ? (
+                    <tr key={p.id} className="border-t border-border/60">
+                      <td colSpan={6} className="py-3">
+                        <form
+                          action={submit(
+                            (fd) => updatePrazo(p.id, fd),
+                            () => setEditingPrazoId(null)
+                          )}
+                          className="grid grid-cols-2 gap-3 rounded-lg bg-background p-4"
+                        >
+                          <div className="col-span-1">
+                            <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Tipo de prazo</label>
+                            <input
+                              name="tipo"
+                              required
+                              defaultValue={p.tipo}
+                              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="col-span-1">
+                            <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Vencimento</label>
+                            <input
+                              name="data_vencimento"
+                              type="date"
+                              required
+                              defaultValue={p.data_vencimento}
+                              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="col-span-1">
+                            <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Responsável</label>
+                            <select
+                              name="responsavel_id"
+                              defaultValue={p.responsavel_id ?? ""}
+                              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="">Não definido</option>
+                              {staffOptions.map((s) => (
+                                <option key={s.id} value={s.id}>{s.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-1">
+                            <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Descrição</label>
+                            <input
+                              name="descricao"
+                              defaultValue={p.descricao ?? ""}
+                              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                            />
+                          </div>
+                          {formError && (
+                            <p className="col-span-2 rounded-md bg-status-critical-bg px-3 py-2 text-[13px] text-status-critical">
+                              {formError}
+                            </p>
+                          )}
+                          <div className="col-span-2 flex items-center gap-3">
+                            <button
+                              type="submit"
+                              disabled={isPending}
+                              className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60"
+                            >
+                              {isPending ? "Salvando..." : "Salvar alterações"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormError(null);
+                                setEditingPrazoId(null);
+                              }}
+                              className="text-[13px] text-text-muted hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={p.id} className="border-t border-border/60">
+                      <td className="py-3 font-semibold text-foreground">{fmtDate(p.data_vencimento)}</td>
+                      <td className="py-3 text-text-secondary">
+                        {p.tipo}
+                        {p.descricao && <div className="text-[12px] text-text-muted">{p.descricao}</div>}
+                      </td>
+                      <td className="py-3 text-text-secondary">
+                        {p.processo_numero || "—"}
+                        {p.cliente_nome && <div className="text-[12px] text-text-muted">{p.cliente_nome}</div>}
+                      </td>
+                      <td className="py-3 text-text-secondary">{p.responsavel_nome || "—"}</td>
+                      <td className="py-3"><UrgenciaBadge urgencia={p.urgencia} /></td>
+                      <td className="py-3 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            disabled={isPending}
+                            onClick={() => {
+                              setFormError(null);
+                              setEditingPrazoId(p.id);
+                            }}
+                            className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            disabled={isPending}
+                            onClick={() => startTransition(() => updatePrazoStatus(p.id, "concluido"))}
+                            className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
+                          >
+                            Concluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>

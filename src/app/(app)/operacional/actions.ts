@@ -77,6 +77,32 @@ export async function createPrazo(formData: FormData) {
   revalidatePath("/operacional");
 }
 
+export async function updatePrazo(id: string, formData: FormData) {
+  const session = await getCurrentProfile();
+  if (!session) throw new Error("Sessão expirada, faça login de novo.");
+
+  const tipo = String(formData.get("tipo") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  const dataVencimento = String(formData.get("data_vencimento") ?? "");
+  const responsavelId = String(formData.get("responsavel_id") ?? "") || null;
+
+  if (!tipo || !dataVencimento) {
+    throw new Error("Informe o tipo de prazo e a data de vencimento.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("prazos")
+    .update({ tipo, descricao, data_vencimento: dataVencimento, responsavel_id: responsavelId })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Não foi possível atualizar o prazo: ${error.message}`);
+  }
+
+  revalidatePath("/operacional");
+}
+
 export async function updatePrazoStatus(id: string, status: "pendente" | "concluido") {
   const supabase = await createClient();
   const { error } = await supabase.from("prazos").update({ status }).eq("id", id);

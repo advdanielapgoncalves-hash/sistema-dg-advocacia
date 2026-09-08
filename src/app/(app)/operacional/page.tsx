@@ -100,6 +100,7 @@ export default async function OperacionalPage({
       descricao: p.descricao,
       data_vencimento: p.data_vencimento,
       status: p.status,
+      responsavel_id: p.responsavel_id,
       responsavel_nome: p.responsavel_id ? profileName.get(p.responsavel_id) ?? null : null,
       cliente_nome: p.cliente_id
         ? clienteName.get(p.cliente_id) ?? null
