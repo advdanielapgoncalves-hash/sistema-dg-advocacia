@@ -315,17 +315,98 @@ export async function deleteApontamento(id: string) {
   revalidatePath("/operacional");
 }
 
-export async function marcarIntimacaoRevisada(id: string) {
+// Tratamento de publicação/intimação (pedido 09/09, no molde do Astrea): ao
+// abrir uma publicação não tratada, só existem dois caminhos — descartar (sem
+// gerar prazo) ou agendar um prazo a partir dela. Feito um dos dois, ela some
+// da lista de pendentes (page.tsx só busca as com tratamento ainda nulo).
+
+export async function descartarPublicacao(id: string, formData: FormData) {
   const session = await getCurrentProfile();
   if (!session) throw new Error("Sessão expirada, faça login de novo.");
+
+  const motivo = String(formData.get("motivo") ?? "").trim() || null;
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("andamentos_processuais")
-    .update({ revisado_por: session.profile.id, revisado_em: new Date().toISOString() })
+    .update({
+      revisado_por: session.profile.id,
+      revisado_em: new Date().toISOString(),
+      tratamento: "descartado",
+      // guarda o motivo (se informado) junto da descrição original, sem
+      // sobrescrever o texto da publicação em si.
+      ...(motivo ? { descricao_tratamento: motivo } : {}),
+    })
     .eq("id", id);
 
-  if (error) throw new Error(`Não foi possível marcar como revisada: ${error.message}`);
+  if (error) throw new Error(`Não foi possível descartar a publicação: ${error.message}`);
+  revalidatePath("/operacional");
+}
+
+export async function agendarPrazoDaPublicacao(andamentoId: string, formData: FormData) {
+  const session = await getCurrentProfile();
+  if (!session) throw new Error("Sessão expirada, faça login de novo.");
+
+  const tipo = String(formData.get("tipo") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim() || null;
+  const dataVencimento = String(formData.get("data_vencimento") ?? "");
+  const responsavelId = String(formData.get("responsavel_id") ?? "") || null;
+
+  if (!tipo || !dataVencimento) {
+    throw new Error("Informe o tipo de prazo e a data de vencimento.");
+  }
+
+  const supabase = await createClient();
+
+  const { data: andamento, error: errAndamento } = await supabase
+    .from("andamentos_processuais")
+    .select("id, processo_id, tratamento, processos(cliente_id)")
+    .eq("id", andamentoId)
+    .single();
+
+  if (errAndamento || !andamento) {
+    throw new Error("Publicação não encontrada.");
+  }
+  if (andamento.tratamento) {
+    throw new Error("Esta publicação já foi tratada.");
+  }
+
+  const processo = Array.isArray(andamento.processos) ? andamento.processos[0] : andamento.processos;
+
+  const { data: novoPrazo, error: errPrazo } = await supabase
+    .from("prazos")
+    .insert({
+      processo_id: andamento.processo_id,
+      cliente_id: processo?.cliente_id ?? null,
+      tipo,
+      descricao,
+      data_vencimento: dataVencimento,
+      responsavel_id: responsavelId,
+      created_by: session.profile.id,
+    })
+    .select("id")
+    .single();
+
+  if (errPrazo || !novoPrazo) {
+    throw new Error(`Não foi possível criar o prazo: ${errPrazo?.message ?? "erro desconhecido"}`);
+  }
+
+  const { error: errUpdate } = await supabase
+    .from("andamentos_processuais")
+    .update({
+      revisado_por: session.profile.id,
+      revisado_em: new Date().toISOString(),
+      tratamento: "prazo_agendado",
+      prazo_id: novoPrazo.id,
+    })
+    .eq("id", andamentoId);
+
+  if (errUpdate) {
+    throw new Error(
+      `O prazo foi criado, mas não foi possível marcar a publicação como tratada: ${errUpdate.message}`
+    );
+  }
+
   revalidatePath("/operacional");
 }
 

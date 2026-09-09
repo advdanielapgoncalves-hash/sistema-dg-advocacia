@@ -47,9 +47,12 @@ export default async function OperacionalPage({
         .order("created_at", { ascending: false }),
       supabase
         .from("andamentos_processuais")
-        .select("id, processo_id, descricao, data_andamento, data_push, tipo, revisado_por")
+        .select(
+          "id, processo_id, descricao, data_andamento, data_push, tipo, revisado_por, revisado_em, tratamento, descricao_tratamento, prazo_id, prazos(tipo, data_vencimento)"
+        )
         .eq("tipo", "intimacao")
-        .order("data_push", { ascending: false }),
+        .order("data_push", { ascending: false })
+        .limit(200),
       supabase
         .from("apontamentos_tempo")
         .select("id, descricao, minutos, data, tarefa_id, prazo_id, profile_id")
@@ -128,6 +131,7 @@ export default async function OperacionalPage({
 
   const publicacaoRows: PublicacaoRow[] = (andamentos ?? []).map((a) => {
     const processo = processoById.get(a.processo_id);
+    const prazoVinculado = Array.isArray(a.prazos) ? a.prazos[0] : a.prazos;
     return {
       id: a.id,
       descricao: a.descricao,
@@ -135,7 +139,11 @@ export default async function OperacionalPage({
       data_push: a.data_push,
       processo_numero: processo?.numero_processo ?? "—",
       cliente_nome: processo ? clienteName.get(processo.cliente_id) ?? "—" : "—",
-      revisado: Boolean(a.revisado_por),
+      tratamento: a.tratamento as "prazo_agendado" | "descartado" | null,
+      descricao_tratamento: a.descricao_tratamento,
+      revisado_em: a.revisado_em,
+      prazo_tipo: prazoVinculado?.tipo ?? null,
+      prazo_vencimento: prazoVinculado?.data_vencimento ?? null,
     };
   });
 

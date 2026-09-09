@@ -10,7 +10,8 @@ import {
   concluirPrazo,
   concluirTarefa,
   updateTarefaStatus,
-  marcarIntimacaoRevisada,
+  descartarPublicacao,
+  agendarPrazoDaPublicacao,
   createApontamento,
   deleteApontamento,
   createAndamentoManual,
@@ -70,7 +71,11 @@ export type PublicacaoRow = {
   data_push: string;
   processo_numero: string;
   cliente_nome: string;
-  revisado: boolean;
+  tratamento: "prazo_agendado" | "descartado" | null;
+  descricao_tratamento: string | null;
+  revisado_em: string | null;
+  prazo_tipo: string | null;
+  prazo_vencimento: string | null;
 };
 
 export type TimesheetRow = {
@@ -169,6 +174,9 @@ export default function OperacionalClient({
   const [concluindoTarefaId, setConcluindoTarefaId] = useState<string | null>(null);
   const [showTimesheetForm, setShowTimesheetForm] = useState(false);
   const [showAndamentoForm, setShowAndamentoForm] = useState(false);
+  const [tratandoPublicacaoId, setTratandoPublicacaoId] = useState<string | null>(null);
+  const [tratamentoAcao, setTratamentoAcao] = useState<"prazo" | "descartar" | null>(null);
+  const [showTratadas, setShowTratadas] = useState(false);
   const [vinculoTipo, setVinculoTipo] = useState<"nenhum" | "tarefa" | "prazo">("nenhum");
   const [formError, setFormError] = useState<string | null>(null);
   const [syncPending, startSync] = useTransition();
@@ -1039,32 +1047,245 @@ export default function OperacionalClient({
             </p>
           )}
 
-          <ul className="flex flex-col divide-y divide-border/60">
-            {publicacoes.length === 0 && <li className="py-6 text-center text-sm text-text-muted">Nenhuma intimação registrada.</li>}
-            {publicacoes.map((pub) => (
-              <li key={pub.id} className="flex items-start justify-between py-3 text-sm">
-                <div>
-                  <div className="font-semibold text-foreground">{pub.processo_numero} — {pub.cliente_nome}</div>
-                  <div className="text-text-secondary">{pub.descricao}</div>
-                  <div className="mt-0.5 text-[12px] text-text-muted">
-                    Andamento em {fmtDate(pub.data_andamento)} · recebida em{" "}
-                    {new Date(pub.data_push).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+          {(() => {
+            const pendentes = publicacoes.filter((p) => !p.tratamento);
+            const tratadas = publicacoes.filter((p) => p.tratamento);
+            return (
+              <>
+                <ul className="flex flex-col divide-y divide-border/60">
+                  {pendentes.length === 0 && (
+                    <li className="py-6 text-center text-sm text-text-muted">Nenhuma publicação pendente de tratamento.</li>
+                  )}
+                  {pendentes.map((pub) => (
+                    <Fragment key={pub.id}>
+                      <li
+                        className="cursor-pointer py-3 text-sm hover:bg-background/60"
+                        onClick={() => {
+                          setFormError(null);
+                          if (tratandoPublicacaoId === pub.id) {
+                            setTratandoPublicacaoId(null);
+                            setTratamentoAcao(null);
+                          } else {
+                            setTratandoPublicacaoId(pub.id);
+                            setTratamentoAcao(null);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-foreground">{pub.processo_numero} — {pub.cliente_nome}</div>
+                            <div className="text-text-secondary">{pub.descricao}</div>
+                            <div className="mt-0.5 text-[12px] text-text-muted">
+                              Andamento em {fmtDate(pub.data_andamento)} · recebida em{" "}
+                              {new Date(pub.data_push).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-status-warning-bg px-2.5 py-0.5 text-[12px] font-semibold text-status-warning">
+                            Não tratada
+                          </span>
+                        </div>
+                      </li>
+
+                      {tratandoPublicacaoId === pub.id && (
+                        <li className="bg-background/60 px-1 py-4" onClick={(e) => e.stopPropagation()}>
+                          {tratamentoAcao === null && (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="text-[13px] font-semibold text-foreground">Tratar publicação:</span>
+                              <button
+                                onClick={() => setTratamentoAcao("prazo")}
+                                className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white hover:bg-brand-navy-hover"
+                              >
+                                Agendar prazo
+                              </button>
+                              <button
+                                onClick={() => setTratamentoAcao("descartar")}
+                                className="rounded-md border border-border px-4 py-2 text-[13px] font-bold text-foreground hover:bg-background"
+                              >
+                                Descartar (irrelevante)
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setTratandoPublicacaoId(null);
+                                  setTratamentoAcao(null);
+                                }}
+                                className="text-[13px] text-text-muted hover:underline"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          )}
+
+                          {tratamentoAcao === "prazo" && (
+                            <form
+                              action={submit(
+                                (fd) => agendarPrazoDaPublicacao(pub.id, fd),
+                                () => {
+                                  setTratandoPublicacaoId(null);
+                                  setTratamentoAcao(null);
+                                }
+                              )}
+                              className="grid grid-cols-2 gap-3"
+                            >
+                              <div className="col-span-2 text-[12.5px] text-text-muted">
+                                O prazo será vinculado ao processo <strong>{pub.processo_numero}</strong> ({pub.cliente_nome}).
+                              </div>
+                              <div className="col-span-1">
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Tipo de prazo</label>
+                                <input
+                                  name="tipo"
+                                  required
+                                  placeholder="Ex: Contestação"
+                                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Vencimento</label>
+                                <input
+                                  name="data_vencimento"
+                                  type="date"
+                                  required
+                                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Responsável</label>
+                                <select
+                                  name="responsavel_id"
+                                  defaultValue=""
+                                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                                >
+                                  <option value="">Não definido</option>
+                                  {staffOptions.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="col-span-1">
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Descrição (opcional)</label>
+                                <input
+                                  name="descricao"
+                                  defaultValue={pub.descricao}
+                                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                />
+                              </div>
+                              {formError && (
+                                <p className="col-span-2 rounded-md bg-status-critical-bg px-3 py-2 text-[13px] text-status-critical">
+                                  {formError}
+                                </p>
+                              )}
+                              <div className="col-span-2 flex items-center gap-3">
+                                <button
+                                  type="submit"
+                                  disabled={isPending}
+                                  className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60"
+                                >
+                                  {isPending ? "Salvando..." : "Criar prazo e marcar como tratada"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTratamentoAcao(null)}
+                                  className="text-[13px] text-text-muted hover:underline"
+                                >
+                                  Voltar
+                                </button>
+                              </div>
+                            </form>
+                          )}
+
+                          {tratamentoAcao === "descartar" && (
+                            <form
+                              action={submit(
+                                (fd) => descartarPublicacao(pub.id, fd),
+                                () => {
+                                  setTratandoPublicacaoId(null);
+                                  setTratamentoAcao(null);
+                                }
+                              )}
+                              className="flex flex-col gap-3"
+                            >
+                              <div>
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
+                                  Motivo (opcional) — por que esta publicação não exige prazo/ação
+                                </label>
+                                <textarea
+                                  name="motivo"
+                                  rows={2}
+                                  placeholder='Ex: "Apenas ciência, já constava no processo"'
+                                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                />
+                              </div>
+                              {formError && (
+                                <p className="rounded-md bg-status-critical-bg px-3 py-2 text-[13px] text-status-critical">{formError}</p>
+                              )}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="submit"
+                                  disabled={isPending}
+                                  className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60"
+                                >
+                                  {isPending ? "Salvando..." : "Confirmar descarte"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTratamentoAcao(null)}
+                                  className="text-[13px] text-text-muted hover:underline"
+                                >
+                                  Voltar
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </li>
+                      )}
+                    </Fragment>
+                  ))}
+                </ul>
+
+                {tratadas.length > 0 && (
+                  <div className="mt-4 border-t border-border/60 pt-3">
+                    <button
+                      onClick={() => setShowTratadas((v) => !v)}
+                      className="text-[13px] font-semibold text-brand-navy hover:underline"
+                    >
+                      {showTratadas ? "Ocultar" : "Ver"} tratadas ({tratadas.length})
+                    </button>
+                    {showTratadas && (
+                      <ul className="mt-2 flex flex-col divide-y divide-border/60">
+                        {tratadas.map((pub) => (
+                          <li key={pub.id} className="py-3 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-semibold text-foreground">{pub.processo_numero} — {pub.cliente_nome}</div>
+                                <div className="text-text-secondary">{pub.descricao}</div>
+                                <div className="mt-0.5 text-[12px] text-text-muted">
+                                  Andamento em {fmtDate(pub.data_andamento)}
+                                  {pub.revisado_em &&
+                                    ` · tratada em ${new Date(pub.revisado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`}
+                                </div>
+                                {pub.tratamento === "descartado" && pub.descricao_tratamento && (
+                                  <div className="mt-0.5 text-[12px] text-text-muted">Motivo: {pub.descricao_tratamento}</div>
+                                )}
+                              </div>
+                              {pub.tratamento === "prazo_agendado" ? (
+                                <span className="shrink-0 rounded-full bg-status-good-bg px-2.5 py-0.5 text-[12px] font-semibold text-status-good">
+                                  Prazo criado{pub.prazo_tipo ? `: ${pub.prazo_tipo}` : ""}
+                                  {pub.prazo_vencimento ? ` (${fmtDate(pub.prazo_vencimento)})` : ""}
+                                </span>
+                              ) : (
+                                <span className="shrink-0 rounded-full bg-border px-2.5 py-0.5 text-[12px] font-semibold text-text-secondary">
+                                  Descartada
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                </div>
-                {pub.revisado ? (
-                  <span className="rounded-full bg-status-good-bg px-2.5 py-0.5 text-[12px] font-semibold text-status-good">Revisada</span>
-                ) : (
-                  <button
-                    disabled={isPending}
-                    onClick={() => startTransition(() => marcarIntimacaoRevisada(pub.id))}
-                    className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
-                  >
-                    Marcar revisada
-                  </button>
                 )}
-              </li>
-            ))}
-          </ul>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
