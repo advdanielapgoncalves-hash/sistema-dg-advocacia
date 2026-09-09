@@ -119,13 +119,14 @@ export default function PrazosPainelWidget({ prazos }: { prazos: PrazoPainelRow[
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
                       <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
-                        Tempo gasto (minutos, opcional)
+                        Tempo gasto (minutos)
                       </label>
                       <input
                         name="minutos"
                         type="number"
                         min="1"
                         step="1"
+                        required
                         placeholder="Ex: 45"
                         className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
                       />
@@ -139,7 +140,7 @@ export default function PrazosPainelWidget({ prazos }: { prazos: PrazoPainelRow[
                     </button>
                   </div>
                   <p className="text-[11.5px] text-text-muted">
-                    Se informar o tempo, ele já entra lançado no timesheet vinculado a este prazo.
+                    O tempo lançado aqui entra no timesheet vinculado a este prazo — é obrigatório para concluir.
                   </p>
                 </form>
               </div>

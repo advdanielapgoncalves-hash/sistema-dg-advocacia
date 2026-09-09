@@ -52,23 +52,26 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
   });
 
   // Horas trabalhadas dedicadas a este cliente: soma os apontamentos de tempo
-  // (timesheet) vinculados a um prazo deste cliente, direta ou indiretamente
-  // (via uma tarefa que está vinculada a um prazo deste cliente).
+  // (timesheet) vinculados a este cliente por qualquer um dos três caminhos
+  // que existem hoje: (1) direto num prazo deste cliente; (2) numa tarefa
+  // vinculada a um prazo deste cliente; (3) numa tarefa vinculada diretamente
+  // a este cliente (ex: tarefa pré-processual, concluída com "Baixar tarefa",
+  // que exige vincular um cliente mesmo sem processo/prazo).
   //
-  // Limitação conhecida: um apontamento lançado sem nenhum vínculo ("avulso")
-  // ou vinculado só a uma tarefa que não está presa a nenhum prazo deste
-  // cliente NÃO entra nessa soma — o esquema do banco hoje não liga tarefas
-  // direto a um cliente/processo, só através de um prazo. Ou seja, esse total
-  // pode ficar abaixo do tempo real dedicado ao cliente se a equipe lançar
-  // tempo sem vincular a um prazo.
+  // Limitação conhecida: um apontamento lançado totalmente avulso (sem prazo
+  // e sem tarefa) não entra nessa soma — não tem como saber de qual cliente é.
   const { data: prazosCliente } = await supabase.from("prazos").select("id").eq("cliente_id", id);
   const prazoIds = (prazosCliente ?? []).map((p) => p.id);
 
-  let tarefaIds: string[] = [];
+  const { data: tarefasDoCliente } = await supabase.from("tarefas").select("id").eq("cliente_id", id);
+  const tarefaIdsDiretas = (tarefasDoCliente ?? []).map((t) => t.id);
+
+  let tarefaIdsViaPrazo: string[] = [];
   if (prazoIds.length > 0) {
     const { data: tarefasVinculadas } = await supabase.from("tarefas").select("id").in("prazo_id", prazoIds);
-    tarefaIds = (tarefasVinculadas ?? []).map((t) => t.id);
+    tarefaIdsViaPrazo = (tarefasVinculadas ?? []).map((t) => t.id);
   }
+  const tarefaIds = Array.from(new Set([...tarefaIdsDiretas, ...tarefaIdsViaPrazo]));
 
   let totalMinutosCliente = 0;
   if (prazoIds.length > 0) {
@@ -162,8 +165,8 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         <div className="mb-1">
           <span className="text-[15px] font-bold text-foreground">Horas trabalhadas (timesheet)</span>
           <p className="mt-0.5 text-[12.5px] text-text-muted">
-            Soma dos apontamentos de tempo vinculados a prazos deste cliente. Tempo lançado sem vínculo a um
-            prazo deste cliente não entra nessa conta.
+            Soma dos apontamentos de tempo vinculados a prazos ou tarefas deste cliente (incluindo tarefas
+            pré-processuais, sem processo). Tempo lançado totalmente avulso não entra nessa conta.
           </p>
         </div>
         <div className="mt-2 text-[26px] font-bold text-foreground">{formatMinutos(totalMinutosCliente)}</div>

@@ -8,6 +8,7 @@ import {
   updatePrazo,
   createTarefa,
   concluirPrazo,
+  concluirTarefa,
   updateTarefaStatus,
   marcarIntimacaoRevisada,
   createApontamento,
@@ -58,6 +59,8 @@ export type TarefaRow = {
   data_limite: string | null;
   responsavel_nome: string | null;
   atribuido_por_nome: string | null;
+  cliente_id: string | null;
+  cliente_nome: string | null;
 };
 
 export type PublicacaoRow = {
@@ -163,6 +166,7 @@ export default function OperacionalClient({
   const [viewingPrazoId, setViewingPrazoId] = useState<string | null>(null);
   const [concluindoPrazoId, setConcluindoPrazoId] = useState<string | null>(null);
   const [showTarefaForm, setShowTarefaForm] = useState(false);
+  const [concluindoTarefaId, setConcluindoTarefaId] = useState<string | null>(null);
   const [showTimesheetForm, setShowTimesheetForm] = useState(false);
   const [showAndamentoForm, setShowAndamentoForm] = useState(false);
   const [vinculoTipo, setVinculoTipo] = useState<"nenhum" | "tarefa" | "prazo">("nenhum");
@@ -587,13 +591,14 @@ export default function OperacionalClient({
                               <div className="flex items-end gap-3">
                                 <div className="w-48">
                                   <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
-                                    Tempo gasto (minutos, opcional)
+                                    Tempo gasto (minutos)
                                   </label>
                                   <input
                                     name="minutos"
                                     type="number"
                                     min="1"
                                     step="1"
+                                    required
                                     placeholder="Ex: 45"
                                     className="w-full rounded-md border border-border px-3 py-2 text-sm"
                                   />
@@ -607,7 +612,7 @@ export default function OperacionalClient({
                                 </button>
                               </div>
                               <p className="text-[11.5px] text-text-muted">
-                                Se informar o tempo, ele já entra lançado no timesheet vinculado a este prazo.
+                                O tempo lançado aqui entra no timesheet vinculado a este prazo — é obrigatório para concluir.
                               </p>
                             </form>
                           </td>
@@ -700,6 +705,19 @@ export default function OperacionalClient({
                 <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Data limite</label>
                 <input name="data_limite" type="date" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
               </div>
+              <div className="col-span-1">
+                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Cliente (opcional)</label>
+                <select name="cliente_id" className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
+                  <option value="">—</option>
+                  {clientesOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11.5px] text-text-muted">
+                  Pode deixar em branco se ainda não houver cliente definido (ex: trabalho pré-processual) — mas
+                  vai ser obrigatório informar na hora de concluir a tarefa.
+                </p>
+              </div>
               <div className="col-span-2">
                 <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Descrição</label>
                 <input name="descricao" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
@@ -715,30 +733,106 @@ export default function OperacionalClient({
           <ul className="flex flex-col divide-y divide-border/60">
             {tarefas.length === 0 && <li className="py-6 text-center text-sm text-text-muted">Nenhuma tarefa em aberto.</li>}
             {tarefas.map((t) => (
-              <li key={t.id} className="flex items-center justify-between py-3 text-sm">
-                <div>
-                  <div className="font-semibold text-foreground">{t.titulo}</div>
-                  <div className="text-[12px] text-text-muted">
-                    {t.responsavel_nome ? `Para: ${t.responsavel_nome}` : ""}
-                    {t.data_limite ? ` · até ${fmtDate(t.data_limite)}` : ""}
-                    {t.atribuido_por_nome ? ` · delegado por ${t.atribuido_por_nome}` : ""}
+              <li key={t.id} className="py-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-foreground">{t.titulo}</div>
+                    <div className="text-[12px] text-text-muted">
+                      {t.responsavel_nome ? `Para: ${t.responsavel_nome}` : ""}
+                      {t.data_limite ? ` · até ${fmtDate(t.data_limite)}` : ""}
+                      {t.atribuido_por_nome ? ` · delegado por ${t.atribuido_por_nome}` : ""}
+                      {t.cliente_nome ? ` · Cliente: ${t.cliente_nome}` : ""}
+                    </div>
+                    {t.descricao && <div className="mt-0.5 text-text-secondary">{t.descricao}</div>}
                   </div>
-                  {t.descricao && <div className="mt-0.5 text-text-secondary">{t.descricao}</div>}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {t.status === "concluida" ? (
+                      <span className="rounded-full bg-status-good-bg px-2.5 py-0.5 text-[12px] font-semibold text-status-good">
+                        Concluída
+                      </span>
+                    ) : (
+                      <>
+                        <select
+                          value={t.status}
+                          disabled={isPending}
+                          onChange={(e) =>
+                            startTransition(() =>
+                              updateTarefaStatus(t.id, e.target.value as "pendente" | "em_andamento")
+                            )
+                          }
+                          className="rounded-md border border-border bg-white px-2 py-1.5 text-[12.5px]"
+                        >
+                          <option value="pendente">Pendente</option>
+                          <option value="em_andamento">Em andamento</option>
+                        </select>
+                        <button
+                          disabled={isPending}
+                          onClick={() => {
+                            setFormError(null);
+                            setConcluindoTarefaId(concluindoTarefaId === t.id ? null : t.id);
+                          }}
+                          className="rounded-md bg-brand-navy px-3 py-1.5 text-[12.5px] font-bold text-white disabled:opacity-60"
+                        >
+                          {concluindoTarefaId === t.id ? "Cancelar" : "Baixar tarefa"}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <select
-                  value={t.status}
-                  disabled={isPending}
-                  onChange={(e) =>
-                    startTransition(() =>
-                      updateTarefaStatus(t.id, e.target.value as "pendente" | "em_andamento" | "concluida")
-                    )
-                  }
-                  className="rounded-md border border-border bg-white px-2 py-1.5 text-[12.5px]"
-                >
-                  <option value="pendente">Pendente</option>
-                  <option value="em_andamento">Em andamento</option>
-                  <option value="concluida">Concluída</option>
-                </select>
+
+                {concluindoTarefaId === t.id && (
+                  <form
+                    action={submit(
+                      (fd) => concluirTarefa(t.id, fd),
+                      () => setConcluindoTarefaId(null)
+                    )}
+                    className="mt-3 flex flex-col gap-3 rounded-lg bg-background p-4"
+                  >
+                    <p className="text-[12.5px] text-text-secondary">
+                      Toda tarefa concluída precisa estar vinculada a um cliente e ter o tempo gasto lançado no
+                      timesheet — mesmo tarefas pré-processuais, feitas antes de existir um processo.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Cliente</label>
+                        <select
+                          name="cliente_id"
+                          required
+                          defaultValue={t.cliente_id ?? ""}
+                          className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                        >
+                          <option value="">Selecione...</option>
+                          {clientesOptions.map((c) => (
+                            <option key={c.id} value={c.id}>{c.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
+                          Tempo gasto (minutos)
+                        </label>
+                        <input
+                          name="minutos"
+                          type="number"
+                          min="1"
+                          step="1"
+                          required
+                          placeholder="Ex: 45"
+                          className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={isPending}
+                        className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60"
+                      >
+                        {isPending ? "Salvando..." : "Concluir tarefa"}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </li>
             ))}
           </ul>

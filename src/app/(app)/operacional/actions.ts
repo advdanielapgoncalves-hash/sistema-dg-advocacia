@@ -115,22 +115,23 @@ export async function updatePrazo(id: string, formData: FormData) {
 
 // Concluir um prazo com registro do que foi feito (pedido da Daniela: ao
 // finalizar, ela quer escrever uma observação — ex: "protocolo na pasta,
-// pendente informar o cliente" — e já ter a opção de lançar o tempo gasto
-// nessa mesma ação, sem precisar ir até a aba Timesheet depois). O tempo,
-// se informado, entra como um apontamento vinculado a este prazo.
+// pendente informar o cliente" — e lançar o tempo gasto na mesma ação, sem
+// precisar ir até a aba Timesheet depois). A partir de outro pedido dela
+// (09/09), o timesheet passou a ser OBRIGATÓRIO pra concluir um prazo — não
+// dá mais pra dar baixa sem informar o tempo gasto.
 export async function concluirPrazo(id: string, formData: FormData) {
   const session = await getCurrentProfile();
   if (!session) throw new Error("Sessão expirada, faça login de novo.");
 
   const observacao = String(formData.get("observacao") ?? "").trim();
-  const minutosRaw = String(formData.get("minutos") ?? "").replace(",", ".").trim();
-  const minutos = minutosRaw ? Math.round(Number(minutosRaw)) : null;
+  const minutosRaw = String(formData.get("minutos") ?? "").replace(",", ".");
+  const minutos = Math.round(Number(minutosRaw));
 
   if (!observacao) {
     throw new Error("Descreva o que foi feito para concluir este prazo.");
   }
-  if (minutosRaw && (!Number.isFinite(minutos) || (minutos as number) <= 0)) {
-    throw new Error("O tempo gasto, se informado, precisa ser maior que zero (em minutos).");
+  if (!Number.isFinite(minutos) || minutos <= 0) {
+    throw new Error("Informe o tempo gasto (em minutos) — é obrigatório para concluir um prazo.");
   }
 
   const supabase = await createClient();
@@ -149,19 +150,17 @@ export async function concluirPrazo(id: string, formData: FormData) {
     throw new Error(`Não foi possível concluir o prazo: ${error.message}`);
   }
 
-  if (minutos) {
-    const { error: apontamentoError } = await supabase.from("apontamentos_tempo").insert({
-      descricao: observacao,
-      minutos,
-      data: new Date().toISOString().slice(0, 10),
-      prazo_id: id,
-      profile_id: session.profile.id,
-    });
-    if (apontamentoError) {
-      throw new Error(
-        `O prazo foi concluído, mas não foi possível lançar o timesheet: ${apontamentoError.message}`
-      );
-    }
+  const { error: apontamentoError } = await supabase.from("apontamentos_tempo").insert({
+    descricao: observacao,
+    minutos,
+    data: new Date().toISOString().slice(0, 10),
+    prazo_id: id,
+    profile_id: session.profile.id,
+  });
+  if (apontamentoError) {
+    throw new Error(
+      `O prazo foi concluído, mas não foi possível lançar o timesheet: ${apontamentoError.message}`
+    );
   }
 
   revalidatePath("/operacional");
@@ -183,6 +182,10 @@ export async function createTarefa(formData: FormData) {
   const descricao = String(formData.get("descricao") ?? "").trim() || null;
   const responsavelId = String(formData.get("responsavel_id") ?? "");
   const dataLimite = String(formData.get("data_limite") ?? "") || null;
+  // Opcional na criação — muitas tarefas são um andamento pré-processual
+  // (feito antes de existir um processo/cliente definido). Fica obrigatório
+  // só na hora de concluir (ver concluirTarefa), não aqui.
+  const clienteId = String(formData.get("cliente_id") ?? "") || null;
 
   if (!titulo || !responsavelId) {
     throw new Error("Informe o título da tarefa e o responsável.");
@@ -194,6 +197,7 @@ export async function createTarefa(formData: FormData) {
     descricao,
     responsavel_id: responsavelId,
     data_limite: dataLimite,
+    cliente_id: clienteId,
     atribuido_por: session.profile.id,
   });
 
@@ -206,12 +210,69 @@ export async function createTarefa(formData: FormData) {
 
 export async function updateTarefaStatus(
   id: string,
-  status: "pendente" | "em_andamento" | "concluida"
+  status: "pendente" | "em_andamento"
 ) {
   const supabase = await createClient();
   const { error } = await supabase.from("tarefas").update({ status }).eq("id", id);
   if (error) throw new Error(`Não foi possível atualizar a tarefa: ${error.message}`);
   revalidatePath("/operacional");
+}
+
+// Concluir ("baixar") uma tarefa. Pedido da Daniela (09/09): tarefas muitas
+// vezes são trabalho pré-processual (antes de existir um processo), mas
+// mesmo assim precisam ficar vinculadas a um cliente — e, como nos prazos,
+// o tempo gasto (timesheet) é obrigatório. Não deixa concluir sem os dois.
+export async function concluirTarefa(id: string, formData: FormData) {
+  const session = await getCurrentProfile();
+  if (!session) throw new Error("Sessão expirada, faça login de novo.");
+
+  const clienteId = String(formData.get("cliente_id") ?? "") || null;
+  const minutosRaw = String(formData.get("minutos") ?? "").replace(",", ".");
+  const minutos = Math.round(Number(minutosRaw));
+
+  if (!clienteId) {
+    throw new Error("Selecione o cliente vinculado a esta tarefa — não é possível concluir sem isso.");
+  }
+  if (!Number.isFinite(minutos) || minutos <= 0) {
+    throw new Error("Informe o tempo gasto (em minutos) — é obrigatório para concluir uma tarefa.");
+  }
+
+  const supabase = await createClient();
+
+  const { data: tarefa, error: fetchError } = await supabase
+    .from("tarefas")
+    .select("titulo")
+    .eq("id", id)
+    .single();
+  if (fetchError || !tarefa) {
+    throw new Error("Não foi possível localizar esta tarefa.");
+  }
+
+  const { error } = await supabase
+    .from("tarefas")
+    .update({ status: "concluida", cliente_id: clienteId })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Não foi possível concluir a tarefa: ${error.message}`);
+  }
+
+  const { error: apontamentoError } = await supabase.from("apontamentos_tempo").insert({
+    descricao: `Tarefa: ${tarefa.titulo}`,
+    minutos,
+    data: new Date().toISOString().slice(0, 10),
+    tarefa_id: id,
+    profile_id: session.profile.id,
+  });
+  if (apontamentoError) {
+    throw new Error(
+      `A tarefa foi concluída, mas não foi possível lançar o timesheet: ${apontamentoError.message}`
+    );
+  }
+
+  revalidatePath("/operacional");
+  revalidatePath("/painel");
+  revalidatePath("/clientes");
 }
 
 export async function createApontamento(formData: FormData) {

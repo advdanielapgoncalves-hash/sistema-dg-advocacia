@@ -43,7 +43,7 @@ export default async function OperacionalPage({
         .order("data_vencimento", { ascending: true }),
       supabase
         .from("tarefas")
-        .select("id, titulo, descricao, status, data_limite, responsavel_id, atribuido_por")
+        .select("id, titulo, descricao, status, data_limite, responsavel_id, atribuido_por, cliente_id")
         .order("created_at", { ascending: false }),
       supabase
         .from("andamentos_processuais")
@@ -122,6 +122,8 @@ export default async function OperacionalPage({
     data_limite: t.data_limite,
     responsavel_nome: t.responsavel_id ? profileName.get(t.responsavel_id) ?? null : null,
     atribuido_por_nome: t.atribuido_por ? profileName.get(t.atribuido_por) ?? null : null,
+    cliente_id: t.cliente_id,
+    cliente_nome: t.cliente_id ? clienteName.get(t.cliente_id) ?? null : null,
   }));
 
   const publicacaoRows: PublicacaoRow[] = (andamentos ?? []).map((a) => {
