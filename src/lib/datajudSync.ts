@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consultarProcessoDataJud, classificarMovimentoDataJud } from "@/lib/datajud";
+import { classificarAndamento, isRelevantePararRelatorio } from "@/lib/classificacaoAndamento";
 
 export type ResumoSincronizacao = {
   processosVerificados: number;
@@ -65,12 +66,21 @@ export async function runDataJudSync(): Promise<ResumoSincronizacao> {
       const chave = `${dataAndamento}|${nome}`;
       if (jaExiste.has(chave)) continue;
 
+      // Classificação pro relatório quinzenal do cliente (pedido 09/09) —
+      // movimentos do DataJud seguem a Tabela Processual Unificada do CNJ,
+      // que já registra oficialmente "Juntada de Petição Inicial",
+      // "Contestação", "Réplica" etc. no nome do movimento. Ver
+      // src/lib/classificacaoAndamento.ts.
+      const categoriaRelatorio = classificarAndamento(nome);
+
       const { error: errInsert } = await supabase.from("andamentos_processuais").insert({
         processo_id: processo.id,
         data_andamento: dataAndamento,
         descricao: nome,
         origem: "datajud",
         tipo: classificarMovimentoDataJud(nome),
+        categoria_relatorio: categoriaRelatorio,
+        relevante_relatorio: isRelevantePararRelatorio(categoriaRelatorio),
         data_push: new Date().toISOString(),
       });
 

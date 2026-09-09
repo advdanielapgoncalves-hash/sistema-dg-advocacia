@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import { classificarAndamento, isRelevantePararRelatorio } from "@/lib/classificacaoAndamento";
 
 export async function createProcesso(formData: FormData) {
   const session = await getCurrentProfile();
@@ -344,6 +345,11 @@ export async function createAndamentoManual(formData: FormData) {
     throw new Error("Tipo inválido.");
   }
 
+  // Classificação pro relatório quinzenal do cliente (pedido 09/09) — um
+  // andamento lançado manualmente também pode ser uma decisão/sentença/
+  // acórdão/petição relevante, então passa pelo mesmo classificador.
+  const categoriaRelatorio = classificarAndamento(descricao);
+
   const supabase = await createClient();
   const { error } = await supabase.from("andamentos_processuais").insert({
     processo_id: processoId,
@@ -351,6 +357,8 @@ export async function createAndamentoManual(formData: FormData) {
     descricao,
     origem: "manual",
     tipo,
+    categoria_relatorio: categoriaRelatorio,
+    relevante_relatorio: isRelevantePararRelatorio(categoriaRelatorio),
     data_push: new Date().toISOString(),
   });
 

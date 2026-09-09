@@ -4,6 +4,14 @@
     {
       "path": "/api/sync-datajud",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/sync-djen",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/gerar-relatorios",
+      "schedule": "0 10 1,15 * *"
     }
   ]
 }

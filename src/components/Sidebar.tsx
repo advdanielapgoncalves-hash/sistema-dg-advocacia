@@ -35,12 +35,16 @@ const ICONS = {
   configuracoes: (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
   ),
+  relatorios: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h13l3 3v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" /><path d="M8 12h8M8 16h8M8 8h4" /></svg>
+  ),
 };
 
 const ALL_ITEMS: NavItem[] = [
   { href: "/painel", label: "Painel", module: "painel", icon: ICONS.painel },
   { href: "/clientes", label: "Clientes", module: "clientes", icon: ICONS.clientes },
   { href: "/operacional", label: "Operacional", module: "operacional", icon: ICONS.processos },
+  { href: "/relatorios", label: "Relatórios", module: "clientes", icon: ICONS.relatorios },
   { href: "/financeiro", label: "Financeiro", module: "financeiro", icon: ICONS.financeiro },
   { href: "/tribunal", label: "Credenciais de Tribunal", module: "tribunal", icon: ICONS.configuracoes },
   { href: "/configuracoes", label: "Configurações", module: "configuracoes", icon: ICONS.configuracoes },
