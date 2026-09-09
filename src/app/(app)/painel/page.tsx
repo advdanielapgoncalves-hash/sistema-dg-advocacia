@@ -1,17 +1,11 @@
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { businessDaysUntil, classificarPrazo, diaSegurancaD1, URGENCIA_CLASSES, URGENCIA_LABEL } from "@/lib/businessDays";
+import { businessDaysUntil, classificarPrazo } from "@/lib/businessDays";
+import PrazosPainelWidget from "./PrazosPainelWidget";
 
 function fmtDate(d: string) {
   return new Date(`${d}T00:00:00`).toLocaleDateString("pt-BR");
-}
-
-function fmtD1(dataVencimento: string) {
-  return new Date(`${diaSegurancaD1(dataVencimento)}T00:00:00`).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
 }
 
 function formatBRL(v: number) {
@@ -88,6 +82,7 @@ export default async function PainelPage() {
     const clienteId = p.cliente_id ?? processo?.cliente_id ?? null;
     return {
       ...p,
+      cliente_id: clienteId,
       diasUteis,
       urgencia: classificarPrazo(diasUteis),
       processo_numero: processo?.numero_processo ?? null,
@@ -183,30 +178,7 @@ export default async function PainelPage() {
               <span className="text-[15px] font-bold text-foreground">Próximos prazos</span>
               <Link href="/operacional?tab=prazos" className="text-[13px] font-semibold text-brand-navy hover:underline">Ver todos →</Link>
             </div>
-            <ul className="flex flex-col divide-y divide-border/60">
-              {prazosComUrgencia.length === 0 && <li className="py-3 text-sm text-text-muted">Nenhum prazo pendente.</li>}
-              {prazosComUrgencia.map((p) => {
-                const c = URGENCIA_CLASSES[p.urgencia];
-                return (
-                  <li key={p.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                    <div>
-                      <div className="text-[12px] font-semibold text-brand-navy">
-                        {p.processo_numero || "Sem processo vinculado"}
-                        {p.cliente_nome && ` — ${p.cliente_nome}`}
-                      </div>
-                      <div className="font-semibold text-foreground">{p.tipo}</div>
-                      <div className="text-[12px] text-text-muted">
-                        {fmtDate(p.data_vencimento)}
-                        <span className="ml-2 font-semibold text-status-critical">D-1: {fmtD1(p.data_vencimento)}</span>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${c.text} ${c.bg}`}>
-                      {URGENCIA_LABEL[p.urgencia]}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <PrazosPainelWidget prazos={prazosComUrgencia} />
           </div>
         )}
 

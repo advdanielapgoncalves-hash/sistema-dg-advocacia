@@ -113,6 +113,61 @@ export async function updatePrazo(id: string, formData: FormData) {
   revalidatePath("/operacional");
 }
 
+// Concluir um prazo com registro do que foi feito (pedido da Daniela: ao
+// finalizar, ela quer escrever uma observação — ex: "protocolo na pasta,
+// pendente informar o cliente" — e já ter a opção de lançar o tempo gasto
+// nessa mesma ação, sem precisar ir até a aba Timesheet depois). O tempo,
+// se informado, entra como um apontamento vinculado a este prazo.
+export async function concluirPrazo(id: string, formData: FormData) {
+  const session = await getCurrentProfile();
+  if (!session) throw new Error("Sessão expirada, faça login de novo.");
+
+  const observacao = String(formData.get("observacao") ?? "").trim();
+  const minutosRaw = String(formData.get("minutos") ?? "").replace(",", ".").trim();
+  const minutos = minutosRaw ? Math.round(Number(minutosRaw)) : null;
+
+  if (!observacao) {
+    throw new Error("Descreva o que foi feito para concluir este prazo.");
+  }
+  if (minutosRaw && (!Number.isFinite(minutos) || (minutos as number) <= 0)) {
+    throw new Error("O tempo gasto, se informado, precisa ser maior que zero (em minutos).");
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("prazos")
+    .update({
+      status: "concluido",
+      observacao_conclusao: observacao,
+      concluido_em: new Date().toISOString(),
+      concluido_por: session.profile.id,
+    })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Não foi possível concluir o prazo: ${error.message}`);
+  }
+
+  if (minutos) {
+    const { error: apontamentoError } = await supabase.from("apontamentos_tempo").insert({
+      descricao: observacao,
+      minutos,
+      data: new Date().toISOString().slice(0, 10),
+      prazo_id: id,
+      profile_id: session.profile.id,
+    });
+    if (apontamentoError) {
+      throw new Error(
+        `O prazo foi concluído, mas não foi possível lançar o timesheet: ${apontamentoError.message}`
+      );
+    }
+  }
+
+  revalidatePath("/operacional");
+  revalidatePath("/painel");
+}
+
 export async function updatePrazoStatus(id: string, status: "pendente" | "concluido") {
   const supabase = await createClient();
   const { error } = await supabase.from("prazos").update({ status }).eq("id", id);

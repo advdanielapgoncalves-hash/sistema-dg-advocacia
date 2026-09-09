@@ -7,7 +7,7 @@ import {
   createPrazo,
   updatePrazo,
   createTarefa,
-  updatePrazoStatus,
+  concluirPrazo,
   updateTarefaStatus,
   marcarIntimacaoRevisada,
   createApontamento,
@@ -161,6 +161,7 @@ export default function OperacionalClient({
   const [showPrazoForm, setShowPrazoForm] = useState(false);
   const [editingPrazoId, setEditingPrazoId] = useState<string | null>(null);
   const [viewingPrazoId, setViewingPrazoId] = useState<string | null>(null);
+  const [concluindoPrazoId, setConcluindoPrazoId] = useState<string | null>(null);
   const [showTarefaForm, setShowTarefaForm] = useState(false);
   const [showTimesheetForm, setShowTimesheetForm] = useState(false);
   const [showAndamentoForm, setShowAndamentoForm] = useState(false);
@@ -550,14 +551,68 @@ export default function OperacionalClient({
                             </button>
                             <button
                               disabled={isPending}
-                              onClick={() => startTransition(() => updatePrazoStatus(p.id, "concluido"))}
+                              onClick={() => {
+                                setFormError(null);
+                                setConcluindoPrazoId(concluindoPrazoId === p.id ? null : p.id);
+                              }}
                               className="text-[13px] font-semibold text-brand-navy hover:underline disabled:opacity-50"
                             >
-                              Concluir
+                              {concluindoPrazoId === p.id ? "Cancelar" : "Concluir"}
                             </button>
                           </div>
                         </td>
                       </tr>
+                      {concluindoPrazoId === p.id && (
+                        <tr className="border-t border-border/60 bg-background/60">
+                          <td colSpan={6} className="py-4">
+                            <form
+                              action={submit(
+                                (fd) => concluirPrazo(p.id, fd),
+                                () => setConcluindoPrazoId(null)
+                              )}
+                              className="flex flex-col gap-3"
+                            >
+                              <div>
+                                <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
+                                  Concluir prazo — o que foi feito?
+                                </label>
+                                <textarea
+                                  name="observacao"
+                                  required
+                                  rows={2}
+                                  placeholder='Ex: "Protocolo na pasta, pendente informar o cliente"'
+                                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div className="flex items-end gap-3">
+                                <div className="w-48">
+                                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">
+                                    Tempo gasto (minutos, opcional)
+                                  </label>
+                                  <input
+                                    name="minutos"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    placeholder="Ex: 45"
+                                    className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                                  />
+                                </div>
+                                <button
+                                  type="submit"
+                                  disabled={isPending}
+                                  className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60"
+                                >
+                                  {isPending ? "Salvando..." : "Concluir prazo"}
+                                </button>
+                              </div>
+                              <p className="text-[11.5px] text-text-muted">
+                                Se informar o tempo, ele já entra lançado no timesheet vinculado a este prazo.
+                              </p>
+                            </form>
+                          </td>
+                        </tr>
+                      )}
                       {viewingPrazoId === p.id && (
                         <tr className="border-t border-border/60 bg-background/60">
                           <td colSpan={6} className="py-4">
