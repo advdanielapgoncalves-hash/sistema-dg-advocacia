@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AtendimentoForm, { type AtendimentoRow } from "./AtendimentoForm";
+import FinanceiroClienteSection, {
+  type FinLancamentoRow,
+  type FinParcelaRow,
+} from "./FinanceiroClienteSection";
 
 function formatMinutos(minutos: number) {
   const h = Math.floor(minutos / 60);
@@ -13,7 +17,7 @@ function formatMinutos(minutos: number) {
 }
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireModule("clientes");
+  const session = await requireModule("clientes");
   const { id } = await params;
 
   const supabase = await createClient();
@@ -82,6 +86,49 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
     totalMinutosCliente += (apontTarefa ?? []).reduce((soma, a) => soma + a.minutos, 0);
   }
 
+  // "Toda a vida financeira" do cliente no escritório: só busca e só mostra
+  // pra quem tem permissão de Financeiro (mesma trava do módulo Financeiro
+  // em si — funcionário sem acesso não vê nem o resumo aqui na ficha do
+  // cliente).
+  const podeVerFinanceiro = session.permissions.financeiro;
+  let lancamentosCliente: FinLancamentoRow[] = [];
+  let parcelasCliente: FinParcelaRow[] = [];
+
+  if (podeVerFinanceiro) {
+    const [{ data: lancamentos }, { data: parcelas }] = await Promise.all([
+      supabase
+        .from("financeiro_lancamentos")
+        .select("id, tipo, descricao, valor, data")
+        .eq("cliente_id", id)
+        .order("data", { ascending: false }),
+      supabase
+        .from("financeiro_parcelas")
+        .select("id, descricao, numero_parcela, total_parcelas, valor, forma_recebimento, data_vencimento, status, data_pagamento")
+        .eq("cliente_id", id)
+        .order("data_vencimento", { ascending: true }),
+    ]);
+
+    const todayISO = new Date().toISOString().slice(0, 10);
+    lancamentosCliente = (lancamentos ?? []).map((l) => ({
+      id: l.id,
+      tipo: l.tipo,
+      descricao: l.descricao,
+      valor: Number(l.valor),
+      data: l.data,
+    }));
+    parcelasCliente = (parcelas ?? []).map((p) => ({
+      id: p.id,
+      descricao: p.descricao,
+      numero_parcela: p.numero_parcela,
+      total_parcelas: p.total_parcelas,
+      valor: Number(p.valor),
+      forma_recebimento: p.forma_recebimento,
+      data_vencimento: p.data_vencimento,
+      status: p.status === "pago" ? "pago" : p.data_vencimento < todayISO ? "atrasado" : "a_vencer",
+      data_pagamento: p.data_pagamento,
+    }));
+  }
+
   return (
     <div>
       <Link href="/clientes" className="text-[13px] font-semibold text-brand-navy hover:underline">
@@ -121,6 +168,24 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </div>
         <div className="mt-2 text-[26px] font-bold text-foreground">{formatMinutos(totalMinutosCliente)}</div>
       </div>
+
+      {podeVerFinanceiro && (
+        <div className="mt-6 rounded-xl border border-border bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <span className="text-[15px] font-bold text-foreground">Financeiro deste cliente</span>
+              <p className="mt-0.5 text-[12.5px] text-text-muted">
+                Todo o histórico financeiro do cliente no escritório: entradas já recebidas e parcelas a vencer,
+                atrasadas ou pagas.
+              </p>
+            </div>
+            <Link href="/financeiro?tab=recebimentos" className="text-[13px] font-semibold text-brand-navy hover:underline">
+              + Novo plano de pagamento →
+            </Link>
+          </div>
+          <FinanceiroClienteSection lancamentos={lancamentosCliente} parcelas={parcelasCliente} />
+        </div>
+      )}
 
       <div className="mt-6 rounded-xl border border-border bg-white p-5">
         <div className="mb-3 flex items-center justify-between">

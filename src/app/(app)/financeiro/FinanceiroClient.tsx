@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createLancamento, createParcela, darBaixaParcela, desfazerBaixaParcela } from "./actions";
+import { createLancamento, createPlanoRecebimento, darBaixaParcela, desfazerBaixaParcela } from "./actions";
 import type { Option } from "../operacional/OperacionalClient";
 
 export type LancamentoRow = {
@@ -81,7 +81,9 @@ export default function FinanceiroClient({
   const [tab, setTab] = useState<Tab>(initialTab);
   const [isPending, startTransition] = useTransition();
   const [showLancamentoForm, setShowLancamentoForm] = useState(false);
-  const [showParcelaForm, setShowParcelaForm] = useState(false);
+  const [showPlanoForm, setShowPlanoForm] = useState(false);
+  const [planoTemEntrada, setPlanoTemEntrada] = useState(true);
+  const [planoTemParcelas, setPlanoTemParcelas] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [baixaPendingId, setBaixaPendingId] = useState<string | null>(null);
 
@@ -97,12 +99,12 @@ export default function FinanceiroClient({
     });
   }
 
-  function handleParcela(formData: FormData) {
+  function handlePlano(formData: FormData) {
     setError(null);
     startTransition(async () => {
       try {
-        await createParcela(formData);
-        setShowParcelaForm(false);
+        await createPlanoRecebimento(formData);
+        setShowPlanoForm(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao salvar.");
       }
@@ -325,62 +327,110 @@ export default function FinanceiroClient({
             <div className="mb-3 flex items-center justify-between">
               <span className="text-[15px] font-bold text-foreground">Recebimentos de {fmtMes(mesRecebimentos)}</span>
               <button
-                onClick={() => setShowParcelaForm((v) => !v)}
+                onClick={() => setShowPlanoForm((v) => !v)}
                 className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white hover:bg-brand-navy-hover"
               >
-                {showParcelaForm ? "Cancelar" : "+ Novo recebimento"}
+                {showPlanoForm ? "Cancelar" : "+ Novo plano de pagamento"}
               </button>
             </div>
 
-            {showParcelaForm && (
-              <form action={handleParcela} className="mb-4 grid grid-cols-2 gap-3 rounded-lg bg-background p-4">
-                <div className="col-span-1">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Cliente</label>
-                  <select name="cliente_id" required className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
-                    <option value="">Selecione...</option>
-                    {clientesOptions.map((c) => (
-                      <option key={c.id} value={c.id}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-1">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Processo (opcional)</label>
-                  <select name="processo_id" className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
-                    <option value="">—</option>
-                    {processosOptions.map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Descrição</label>
-                  <input name="descricao" required placeholder="Ex: Honorários — 2ª parcela" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
-                </div>
-                <div className="col-span-1">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Valor (R$)</label>
-                  <input name="valor" type="number" step="0.01" min="0.01" required className="w-full rounded-md border border-border px-3 py-2 text-sm" />
-                </div>
-                <div className="col-span-1">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Data de vencimento</label>
-                  <input name="data_vencimento" type="date" required className="w-full rounded-md border border-border px-3 py-2 text-sm" />
-                </div>
-                <div className="col-span-1">
-                  <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Forma de recebimento</label>
-                  <input name="forma_recebimento" placeholder="Pix, boleto, cartão..." className="w-full rounded-md border border-border px-3 py-2 text-sm" />
-                </div>
-                <div className="col-span-1 grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Parcela nº</label>
-                    <input name="numero_parcela" type="number" min="1" defaultValue={1} className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+            {showPlanoForm && (
+              <form action={handlePlano} className="mb-4 flex flex-col gap-4 rounded-lg bg-background p-4">
+                <p className="text-[12.5px] text-text-secondary">
+                  Registre a entrada (se houver) e as parcelas futuras de uma vez só — as datas de vencimento de
+                  cada parcela são calculadas automaticamente a partir da data da primeira, mês a mês.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-1">
+                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Cliente</label>
+                    <select name="cliente_id" required className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
+                      <option value="">Selecione...</option>
+                      {clientesOptions.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Total de parcelas</label>
-                    <input name="total_parcelas" type="number" min="1" defaultValue={1} className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                  <div className="col-span-1">
+                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Processo (opcional)</label>
+                    <select name="processo_id" className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm">
+                      <option value="">—</option>
+                      {processosOptions.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Descrição do plano</label>
+                    <input name="descricao" required placeholder="Ex: Honorários — Ação de divórcio" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Forma de recebimento (das parcelas)</label>
+                    <input name="forma_recebimento" placeholder="Pix, boleto, cartão..." className="w-full rounded-md border border-border px-3 py-2 text-sm" />
                   </div>
                 </div>
-                <div className="col-span-2">
+
+                <div className="rounded-md border border-border bg-white p-3">
+                  <label className="mb-2 flex items-center gap-2 text-[12.5px] font-semibold text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={planoTemEntrada}
+                      onChange={(e) => setPlanoTemEntrada(e.target.checked)}
+                    />
+                    Tem entrada
+                  </label>
+                  {planoTemEntrada && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Valor da entrada (R$)</label>
+                        <input name="entrada_valor" type="number" step="0.01" min="0.01" placeholder="Ex: 700" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Data da entrada</label>
+                        <input name="entrada_data" type="date" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                      </div>
+                      <p className="col-span-2 text-[11.5px] text-text-muted">
+                        A entrada entra direto no fluxo de caixa (aba &quot;Fluxo de caixa&quot;), como recebida.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-md border border-border bg-white p-3">
+                  <label className="mb-2 flex items-center gap-2 text-[12.5px] font-semibold text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={planoTemParcelas}
+                      onChange={(e) => setPlanoTemParcelas(e.target.checked)}
+                    />
+                    Tem parcelas
+                  </label>
+                  {planoTemParcelas && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Número de parcelas</label>
+                        <input name="numero_parcelas" type="number" min="1" placeholder="Ex: 5" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Valor de cada parcela (R$)</label>
+                        <input name="valor_parcela" type="number" step="0.01" min="0.01" placeholder="Ex: 400" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[12px] font-semibold text-text-secondary">Vencimento da 1ª parcela</label>
+                        <input name="data_primeira_parcela" type="date" className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+                      </div>
+                      <p className="col-span-3 text-[11.5px] text-text-muted">
+                        As demais parcelas vencem no mesmo dia, um mês depois da anterior (ex: 1ª dia 10/10, 2ª dia
+                        10/11, e assim por diante). Cada uma aparece como um recebimento esperado, com baixa manual
+                        quando for paga.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div>
                   <button type="submit" disabled={isPending} className="rounded-md bg-brand-navy px-4 py-2 text-[13px] font-bold text-white disabled:opacity-60">
-                    {isPending ? "Salvando..." : "Salvar recebimento"}
+                    {isPending ? "Salvando..." : "Salvar plano de pagamento"}
                   </button>
                 </div>
               </form>
